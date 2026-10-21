@@ -18,6 +18,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Colorized, aligned tables for human-readable output, with row separators,
   automatic color detection, and `--no-color`/`NO_COLOR` support.
 
+### Fixed
+
+- README badges, clone URLs, and issue-template links now point at the
+  `port-peek` repository.
+- Release archives no longer include the `unknown` vendor field in their
+  filenames, for example `portpeek-x86_64-linux-gnu.tar.gz`.
+
 ## [0.1.0] - 2026-10-21
 
 ### Added
@@ -38,5 +45,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   SHA-256 checksums.
 - Dual MIT/Apache-2.0 licensing.
 
-[Unreleased]: https://github.com/leorossi/portpeek/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/leorossi/portpeek/releases/tag/v0.1.0
+[Unreleased]: https://github.com/leorossi/port-peek/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/leorossi/port-peek/releases/tag/v0.1.0

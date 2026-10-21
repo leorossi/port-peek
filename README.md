@@ -1,7 +1,7 @@
 # portpeek
 
-[![CI](https://github.com/leorossi/portpeek/actions/workflows/ci.yml/badge.svg)](https://github.com/leorossi/portpeek/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/leorossi/portpeek?display_name=tag)](https://github.com/leorossi/portpeek/releases)
+[![CI](https://github.com/leorossi/port-peek/actions/workflows/ci.yml/badge.svg)](https://github.com/leorossi/port-peek/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/leorossi/port-peek?display_name=tag)](https://github.com/leorossi/port-peek/releases)
 [![crates.io](https://img.shields.io/crates/v/portpeek.svg)](https://crates.io/crates/portpeek)
 [![Downloads](https://img.shields.io/crates/d/portpeek.svg)](https://crates.io/crates/portpeek)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
@@ -99,8 +99,8 @@ $ cargo run -- 8080 --json
 If you do not have the source yet:
 
 ```console
-$ git clone https://github.com/leorossi/portpeek.git
-$ cd portpeek
+$ git clone https://github.com/leorossi/port-peek.git
+$ cd port-peek
 $ cargo build --release
 ```
 
@@ -160,7 +160,7 @@ $ sudo "$HOME/.cargo/bin/portpeek" 443
 ### Prebuilt binary
 
 Download the archive for your platform from the
-[latest release](https://github.com/leorossi/portpeek/releases/latest), then put
+[latest release](https://github.com/leorossi/port-peek/releases/latest), then put
 `portpeek` somewhere on your `PATH`.
 
 ```console

@@ -55,21 +55,28 @@ jobs:
         run: cargo build --release --locked --target ${{ matrix.target }}
       - name: Package
         run: |
+          # Drop the "-unknown" vendor field from Rust target triples so the
+          # published asset names stay readable, e.g.
+          # portpeek-x86_64-linux-gnu.tar.gz instead of
+          # portpeek-x86_64-unknown-linux-gnu.tar.gz. Apple triples have no
+          # vendor field and are left unchanged.
+          target="${{ matrix.target }}"
+          asset="portpeek-${target/-unknown/}"
           mkdir -p dist
-          cp "target/${{ matrix.target }}/release/portpeek" dist/
+          cp "target/${target}/release/portpeek" dist/
           cp README.md LICENSE-MIT LICENSE-APACHE dist/
-          tar -C dist -czf "portpeek-${{ matrix.target }}.tar.gz" .
+          tar -C dist -czf "${asset}.tar.gz" .
           if command -v sha256sum >/dev/null 2>&1; then
-            sha256sum "portpeek-${{ matrix.target }}.tar.gz" > "portpeek-${{ matrix.target }}.tar.gz.sha256"
+            sha256sum "${asset}.tar.gz" > "${asset}.tar.gz.sha256"
           else
-            shasum -a 256 "portpeek-${{ matrix.target }}.tar.gz" > "portpeek-${{ matrix.target }}.tar.gz.sha256"
+            shasum -a 256 "${asset}.tar.gz" > "${asset}.tar.gz.sha256"
           fi
       - uses: actions/upload-artifact@v7
         with:
           name: portpeek-${{ matrix.target }}
           path: |
-            portpeek-${{ matrix.target }}.tar.gz
-            portpeek-${{ matrix.target }}.tar.gz.sha256
+            portpeek-*.tar.gz
+            portpeek-*.tar.gz.sha256
           if-no-files-found: error
 
   release:
