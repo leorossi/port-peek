@@ -26,6 +26,10 @@ pub struct Cli {
     /// Omit process command lines (useful when sharing output)
     #[arg(long)]
     pub no_command: bool,
+
+    /// Disable ANSI colors in human-readable output
+    #[arg(long)]
+    pub no_color: bool,
 }
 
 impl Cli {
@@ -56,6 +60,13 @@ mod tests {
     fn defaults_to_tcp() {
         let cli = Cli::try_parse_from(["portpeek", "3000"]).unwrap();
         assert_eq!(cli.protocol(), Protocol::Tcp);
+        assert!(!cli.no_color);
+    }
+
+    #[test]
+    fn parses_no_color() {
+        let cli = Cli::try_parse_from(["portpeek", "3000", "--no-color"]).unwrap();
+        assert!(cli.no_color);
     }
 
     #[test]

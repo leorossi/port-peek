@@ -1,4 +1,5 @@
-use std::io::{self, Write};
+use std::env;
+use std::io::{self, IsTerminal, Write};
 use std::process::ExitCode;
 
 use clap::Parser;
@@ -24,11 +25,18 @@ fn run(cli: Cli) -> Result<bool, Error> {
     let text = if cli.json {
         output::to_json(&report, cli.no_command)?
     } else {
-        output::to_human(&report, cli.no_command)
+        output::to_human_colored(&report, cli.no_command, colors_enabled(&cli))
     };
 
     write_stdout(&text)?;
     Ok(!report.is_empty())
+}
+
+fn colors_enabled(cli: &Cli) -> bool {
+    !cli.no_color
+        && io::stdout().is_terminal()
+        && env::var_os("NO_COLOR").is_none()
+        && env::var_os("TERM").is_none_or(|term| term != "dumb")
 }
 
 fn write_stdout(text: &str) -> Result<(), Error> {

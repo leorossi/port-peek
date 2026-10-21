@@ -60,10 +60,12 @@ Legend: `[ ]` pending · `[x]` done and verified.
 
 ## 4. Output
 
-- [x] Human output: header, per-PID cards, grouped addresses, full command and cwd
+- [x] Human output: colorized per-process tables with grouped addresses, full
+      command, and cwd
 - [x] Show a clear hint when a socket owner cannot be resolved
 - [x] JSON output: stable schema, one entry per listening socket
 - [x] `--no-command` removes command/argv from both human and JSON output
+- [x] `--no-color`, `NO_COLOR`, and non-TTY detection for color output
 - [x] Correct exit codes: 0 found, 1 no listener, 2 error
 - [x] Handle broken pipes without panicking
 
@@ -105,7 +107,7 @@ Legend: `[ ]` pending · `[x]` done and verified.
 
 ## 8. Final verification
 
-- [x] All tests pass locally on macOS (31 unit, 9 integration)
+- [x] All tests pass locally on macOS (33 unit, 10 integration)
 - [x] Linux tests passed on Ubuntu 26.04 aarch64 before the Docker addition;
       the Docker code cross-compiles and is covered by platform-independent
       unit tests
@@ -124,7 +126,9 @@ Legend: `[ ]` pending · `[x]` done and verified.
 - **macOS 15, arm64:** `cargo test`, `cargo clippy`, `cargo fmt --check`,
   `cargo package`, MSRV 1.85 test suite, manual TCP/UDP/IPv6 lookups, and a
   Docker Desktop lookup on port 8000 showing the container name, image,
-  internal port, Compose project, and container command.
+  internal port, Compose project, and container command. Colors were verified
+  through a pseudo-terminal, and disabled for piped output, `NO_COLOR`, and
+  `--no-color`.
 - **Linux aarch64 (Ubuntu 26.04 Lima VM):** full test suite, Clippy, fmt,
   static musl build, glibc release archive, and unprivileged vs `sudo`
   attribution. The Docker client is platform-independent and cross-compiles for

@@ -215,6 +215,22 @@ fn returns_an_empty_report_for_an_unused_port() {
 }
 
 #[test]
+fn cli_output_is_plain_when_piped() {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+    let port = listener.local_addr().unwrap().port();
+
+    let output = Command::new(binary())
+        .arg(port.to_string())
+        .output()
+        .expect("run portpeek");
+    assert!(output.status.success());
+    assert!(
+        !output.stdout.contains(&0x1b),
+        "piped output unexpectedly contained ANSI escapes"
+    );
+}
+
+#[test]
 fn cli_exits_one_when_nothing_is_listening() {
     let probe = TcpListener::bind("127.0.0.1:0").expect("bind");
     let port = probe.local_addr().unwrap().port();

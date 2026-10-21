@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the container name, ID, image, internal port, command, and Compose project.
 - The optional JSON `container` object on Docker-forwarded listeners.
 - `--no-command` also removes the command from container metadata.
+- Colorized, aligned tables for human-readable output, with automatic color
+  detection and `--no-color`/`NO_COLOR` support.
 
 ## [0.1.0] - 2026-10-21
 

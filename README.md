@@ -20,11 +20,14 @@ forwarder.
 $ portpeek 8080
 TCP 8080 · 1 process
 
-PID 4242 · node
-  exe        /opt/homebrew/bin/node
-  listening  127.0.0.1:8080, [::1]:8080
-  cmd        node server.js --port 8080 --inspect
-  cwd        /Users/leo/src/api
+┌─────────────┬──────────────────────────────────────┐
+│ PID         │ 4242                                 │
+│ Process     │ node                                 │
+│ Listening   │ 127.0.0.1:8080, [::1]:8080           │
+│ Executable  │ /opt/homebrew/bin/node               │
+│ Command     │ node server.js --port 8080 --inspect │
+│ Working dir │ /Users/leo/src/api                   │
+└─────────────┴──────────────────────────────────────┘
 ```
 
 ## Features
@@ -38,7 +41,7 @@ PID 4242 · node
 - Docker container name, ID, image, and internal port for forwarded ports
   (read from the local Docker Engine API)
 - TCP by default, UDP with `--udp`
-- Human-readable cards or stable JSON
+- Colorized, aligned tables or stable JSON
 - Linux static (musl) and glibc binaries, x86_64 and aarch64
 - macOS Apple Silicon and Intel binaries
 - No setuid binary, daemon, or background service
@@ -182,6 +185,7 @@ $ portpeek [OPTIONS] <PORT>
 | `--udp` | Inspect UDP sockets instead of TCP |
 | `--json` | Print machine-readable JSON |
 | `--no-command` | Omit `argv`/`command`, including Docker container commands |
+| `--no-color` | Disable ANSI colors in human-readable output |
 | `-h, --help` | Show help |
 | `-V, --version` | Show version |
 
@@ -202,6 +206,10 @@ The command is shown with POSIX shell escaping so it can be copied into a
 shell. The original quoting cannot be recovered from `argv`; the `argv` array in
 JSON is the most faithful form available.
 
+Human-readable output uses ANSI colors when stdout is a terminal. Colors are
+disabled automatically when output is piped or redirected, when `NO_COLOR` is
+set, or when `--no-color` is passed.
+
 ### Docker-forwarded ports
 
 Docker Desktop on macOS forwards published ports through `com.docker.backend`;
@@ -213,15 +221,18 @@ port, and adds the container metadata to the report:
 $ portpeek 8000
 TCP 8000 · 1 process
 
-PID 98560 · com.docker.backend
-  exe        /Applications/Docker.app/Contents/MacOS/com.docker.backend
-  container  telemetry-demo-app (9f8cac51baba)
-  image      telemetry-demo-app
-  internal   8000/tcp
-  compose    2026-10-14-laravel-telemetry-talk
-  listening  [::]:8000
-  cmd        entrypoint.sh php artisan serve --host=0.0.0.0 --port=8000
-  cwd        /Users/leo/Library/Containers/com.docker.docker/Data
+┌─────────────┬────────────────────────────────────────────────────────────┐
+│ PID         │ 98560                                                      │
+│ Process     │ com.docker.backend                                         │
+│ Listening   │ [::]:8000                                                  │
+│ Container   │ telemetry-demo-app (9f8cac51baba)                          │
+│ Image       │ telemetry-demo-app                                         │
+│ Internal    │ 8000/tcp                                                   │
+│ Compose     │ 2026-10-14-laravel-telemetry-talk                          │
+│ Executable  │ /Applications/Docker.app/Contents/MacOS/com.docker.backend │
+│ Command     │ entrypoint.sh php artisan serve --host=0.0.0.0 --port=8000 │
+│ Working dir │ /Users/leonardo/Library/Containers/com.docker.docker/Data  │
+└─────────────┴────────────────────────────────────────────────────────────┘
 ```
 
 The API request is made directly over a Unix socket; no `docker` command is

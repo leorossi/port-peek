@@ -2,111 +2,215 @@ use std::fmt::Write as _;
 
 use crate::{Result, model::Report};
 
+const RESET: &str = "\x1b[0m";
+const STYLE_TITLE: &str = "1;36";
+const STYLE_BORDER: &str = "2";
+const STYLE_LABEL: &str = "1;36";
+const STYLE_PID: &str = "1;33";
+const STYLE_PROCESS: &str = "1";
+const STYLE_ENDPOINT: &str = "36";
+const STYLE_CONTAINER: &str = "1;35";
+const STYLE_DIM: &str = "2";
+const STYLE_NOTE: &str = "33";
+
 /// Render a human-readable report, grouped by process.
 #[must_use]
 pub fn to_human(report: &Report, no_command: bool) -> String {
+    to_human_colored(report, no_command, false)
+}
+
+/// Render a human-readable report, optionally with ANSI colors.
+///
+/// Colors are applied only when `color` is true. The caller should decide
+/// whether stdout is a terminal and whether the user opted out.
+#[must_use]
+pub fn to_human_colored(report: &Report, no_command: bool, color: bool) -> String {
     let normalized = report.clone().normalized();
     let report = &normalized;
     let mut out = String::new();
     let protocol = report.protocol.as_str().to_ascii_uppercase();
 
     if report.is_empty() {
-        let _ = writeln!(out, "{protocol} {} · no listener", report.port);
-        let _ = writeln!(
-            out,
+        let title = format!("{protocol} {} · no listener", report.port);
+        let _ = writeln!(out, "{}", paint(&title, STYLE_TITLE, color));
+        let message = format!(
             "No process is listening on {protocol} port {}.",
             report.port
         );
+        let _ = writeln!(out, "{}", paint(&message, STYLE_DIM, color));
         return out;
     }
 
     let count = report.process_count();
     let noun = if count == 1 { "process" } else { "processes" };
-    let _ = writeln!(out, "{protocol} {} · {count} {noun}", report.port);
+    let title = format!("{protocol} {} · {count} {noun}", report.port);
+    let _ = writeln!(out, "{}", paint(&title, STYLE_TITLE, color));
+    out.push('\n');
 
-    for group in report.listeners.chunk_by(|a, b| a.pid == b.pid) {
-        out.push('\n');
-        let first = &group[0];
-
-        match first.pid {
-            Some(pid) => {
-                let name = first.process.as_deref().unwrap_or("unknown");
-                let _ = writeln!(out, "PID {pid} · {name}");
-            }
-            None => {
-                let _ = writeln!(out, "PID ? · unknown process");
-            }
+    for (index, group) in report.listeners.chunk_by(|a, b| a.pid == b.pid).enumerate() {
+        if index > 0 {
+            out.push('\n');
         }
-
-        if first.pid.is_some() {
-            field(
-                &mut out,
-                "exe",
-                &first.exe.as_ref().map_or_else(
-                    || "(unavailable)".to_owned(),
-                    |path| path.display().to_string(),
-                ),
-            );
-        }
-
-        if let Some(container) = &first.container {
-            field(
-                &mut out,
-                "container",
-                &format!("{} ({})", container.name, container.short_id()),
-            );
-            field(&mut out, "image", &container.image);
-            field(
-                &mut out,
-                "internal",
-                &format!("{}/{}", container.internal_port, container.protocol),
-            );
-            if let Some(project) = &container.compose_project {
-                field(&mut out, "compose", project);
-            }
-        }
-
-        let endpoints = group
-            .iter()
-            .map(crate::model::Listener::endpoint)
-            .collect::<Vec<_>>()
-            .join(", ");
-        field(&mut out, "listening", &endpoints);
-
-        if first.pid.is_some() {
-            if !no_command {
-                let command = first
-                    .container
-                    .as_ref()
-                    .and_then(|container| container.command.as_deref())
-                    .or(first.command.as_deref())
-                    .unwrap_or("(unavailable)");
-                field(&mut out, "cmd", command);
-            }
-            field(
-                &mut out,
-                "cwd",
-                &first.cwd.as_ref().map_or_else(
-                    || "(unavailable)".to_owned(),
-                    |path| path.display().to_string(),
-                ),
-            );
-        }
-
-        if first.pid.is_none() {
-            field(
-                &mut out,
-                "note",
-                "owner not visible; run with sudo to resolve",
-            );
-        }
+        out.push_str(&process_table(group, no_command, color));
     }
 
     out
 }
 
-fn field(out: &mut String, label: &str, value: &str) {
-    let _ = writeln!(out, "  {label:<10} {value}");
+fn process_table(group: &[crate::model::Listener], no_command: bool, color: bool) -> String {
+    let first = &group[0];
+    let mut rows = Vec::new();
+
+    rows.push(Row::new(
+        "PID",
+        first
+            .pid
+            .map_or_else(|| "?".to_owned(), |pid| pid.to_string()),
+        STYLE_PID,
+    ));
+    rows.push(Row::new(
+        "Process",
+        first
+            .process
+            .clone()
+            .unwrap_or_else(|| "unknown".to_owned()),
+        STYLE_PROCESS,
+    ));
+
+    let endpoints = group
+        .iter()
+        .map(crate::model::Listener::endpoint)
+        .collect::<Vec<_>>()
+        .join(", ");
+    rows.push(Row::new("Listening", endpoints, STYLE_ENDPOINT));
+
+    if let Some(container) = &first.container {
+        rows.push(Row::new(
+            "Container",
+            format!("{} ({})", container.name, container.short_id()),
+            STYLE_CONTAINER,
+        ));
+        rows.push(Row::new("Image", container.image.clone(), ""));
+        rows.push(Row::new(
+            "Internal",
+            format!("{}/{}", container.internal_port, container.protocol),
+            "",
+        ));
+        if let Some(project) = &container.compose_project {
+            rows.push(Row::new("Compose", project.clone(), ""));
+        }
+    }
+
+    if first.pid.is_some() {
+        rows.push(Row::new(
+            "Executable",
+            first.exe.as_ref().map_or_else(
+                || "(unavailable)".to_owned(),
+                |path| path.display().to_string(),
+            ),
+            "",
+        ));
+
+        if !no_command {
+            let command = first
+                .container
+                .as_ref()
+                .and_then(|container| container.command.as_deref())
+                .or(first.command.as_deref())
+                .unwrap_or("(unavailable)");
+            rows.push(Row::new("Command", command.to_owned(), ""));
+        }
+
+        rows.push(Row::new(
+            "Working dir",
+            first.cwd.as_ref().map_or_else(
+                || "(unavailable)".to_owned(),
+                |path| path.display().to_string(),
+            ),
+            STYLE_DIM,
+        ));
+    } else {
+        rows.push(Row::new(
+            "Note",
+            "owner not visible; run with sudo to resolve".to_owned(),
+            STYLE_NOTE,
+        ));
+    }
+
+    render_table(&rows, color)
+}
+
+struct Row {
+    label: &'static str,
+    value: String,
+    style: &'static str,
+}
+
+impl Row {
+    fn new(label: &'static str, value: String, style: &'static str) -> Self {
+        Self {
+            label,
+            value,
+            style,
+        }
+    }
+}
+
+fn render_table(rows: &[Row], color: bool) -> String {
+    let label_width = rows
+        .iter()
+        .map(|row| row.label.chars().count())
+        .max()
+        .unwrap_or(0);
+    let value_width = rows
+        .iter()
+        .map(|row| row.value.chars().count())
+        .max()
+        .unwrap_or(0);
+
+    let label_border = "─".repeat(label_width + 2);
+    let value_border = "─".repeat(value_width + 2);
+    let mut out = String::new();
+
+    let top = format!("┌{label_border}┬{value_border}┐");
+    let _ = writeln!(out, "{}", paint(&top, STYLE_BORDER, color));
+
+    for row in rows {
+        let label = pad_to(row.label, label_width);
+        let value = pad_to(&row.value, value_width);
+        let _ = writeln!(
+            out,
+            "│ {} │ {} │",
+            paint(&label, STYLE_LABEL, color),
+            paint(&value, row.style, color)
+        );
+    }
+
+    let bottom = format!("└{label_border}┴{value_border}┘");
+    let _ = writeln!(out, "{}", paint(&bottom, STYLE_BORDER, color));
+    out
+}
+
+fn pad_to(text: &str, width: usize) -> String {
+    let length = text.chars().count();
+    if length >= width {
+        return text.to_owned();
+    }
+
+    let mut padded = String::with_capacity(text.len() + (width - length));
+    padded.push_str(text);
+    for _ in length..width {
+        padded.push(' ');
+    }
+    padded
+}
+
+fn paint(text: &str, style: &str, enabled: bool) -> String {
+    if enabled && !style.is_empty() {
+        format!("\x1b[{style}m{text}{RESET}")
+    } else {
+        text.to_owned()
+    }
 }
 
 /// Render the report as pretty JSON.
@@ -200,29 +304,45 @@ mod tests {
     }
 
     #[test]
-    fn groups_addresses_by_process() {
+    fn groups_addresses_by_process_in_a_table() {
         let text = to_human(&sample(), false);
-        assert!(text.contains("PID 42 · node"));
+        assert!(text.contains("PID"));
+        assert!(text.contains("42"));
+        assert!(text.contains("node"));
         assert!(text.contains("127.0.0.1:8080, [::1]:8080"));
-        assert!(text.contains("cmd        node server.js"));
-        assert!(text.contains("cwd        /tmp/app"));
+        assert!(text.contains("Command"));
+        assert!(text.contains("node server.js"));
+        assert!(text.contains("Working dir"));
+        assert!(text.contains("/tmp/app"));
+        assert!(text.contains('┌'));
+        assert!(text.contains('┘'));
     }
 
     #[test]
     fn renders_docker_container_metadata() {
         let text = to_human(&docker_sample(), false);
-        assert!(text.contains("container  telemetry-demo-app (9f8cac51baba)"));
-        assert!(text.contains("image      telemetry-demo-app"));
-        assert!(text.contains("internal   8000/tcp"));
-        assert!(text.contains("compose    telemetry-talk"));
-        assert!(text.contains("cmd        entrypoint.sh php artisan serve"));
+        assert!(text.contains("Container"));
+        assert!(text.contains("telemetry-demo-app (9f8cac51baba)"));
+        assert!(text.contains("Image"));
+        assert!(text.contains("Internal"));
+        assert!(text.contains("8000/tcp"));
+        assert!(text.contains("Compose"));
+        assert!(text.contains("telemetry-talk"));
+        assert!(text.contains("entrypoint.sh php artisan serve"));
+    }
+
+    #[test]
+    fn no_command_removes_command_from_human_output() {
+        let text = to_human(&sample(), true);
+        assert!(!text.contains("Command"));
+        assert!(text.contains("Working dir"));
     }
 
     #[test]
     fn no_command_also_removes_the_container_command() {
         let text = to_human(&docker_sample(), true);
-        assert!(text.contains("container  telemetry-demo-app"));
-        assert!(!text.contains("cmd "));
+        assert!(text.contains("telemetry-demo-app"));
+        assert!(!text.contains("Command"));
 
         let json = to_json(&docker_sample(), true).unwrap();
         assert!(json.contains("\"container\""));
@@ -230,10 +350,9 @@ mod tests {
     }
 
     #[test]
-    fn no_command_removes_command_from_human_output() {
-        let text = to_human(&sample(), true);
-        assert!(!text.contains("cmd "));
-        assert!(text.contains("cwd"));
+    fn colors_are_opt_in() {
+        assert!(!to_human(&sample(), false).contains('\x1b'));
+        assert!(to_human_colored(&sample(), false, true).contains("\x1b["));
     }
 
     #[test]
@@ -280,7 +399,10 @@ mod tests {
             }],
         );
         let text = to_human(&report, false);
-        assert!(text.contains("PID ? · unknown process"));
+        assert!(text.contains("PID"));
+        assert!(text.contains('?'));
+        assert!(text.contains("unknown"));
+        assert!(text.contains("Note"));
         assert!(text.contains("run with sudo"));
     }
 
