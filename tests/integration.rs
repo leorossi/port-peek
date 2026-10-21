@@ -12,6 +12,30 @@ fn binary() -> &'static str {
     env!("CARGO_BIN_EXE_portpeek")
 }
 
+/// Return a port that nothing is listening on.
+///
+/// Ports from the OS ephemeral range are deliberately avoided: `cargo test`
+/// runs the integration tests in parallel, so a concurrent `bind(..., 0)` can
+/// be handed a port that another test has just released. Choosing from a fixed
+/// non-ephemeral range keeps the "nothing is listening" tests from racing with
+/// the listener tests.
+fn unused_port() -> u16 {
+    for port in 20_000..30_000 {
+        let Ok(probe) = TcpListener::bind(("127.0.0.1", port)) else {
+            continue;
+        };
+        drop(probe);
+
+        let empty = find_listeners(port, Protocol::Tcp)
+            .map(|report| report.listeners.is_empty())
+            .unwrap_or(false);
+        if empty {
+            return port;
+        }
+    }
+    panic!("could not find an unused TCP port");
+}
+
 struct ChildGuard(Child);
 
 impl ChildGuard {
@@ -200,9 +224,7 @@ fn reports_the_full_command_line_and_working_directory() {
 
 #[test]
 fn returns_an_empty_report_for_an_unused_port() {
-    let probe = TcpListener::bind("127.0.0.1:0").expect("bind");
-    let port = probe.local_addr().unwrap().port();
-    drop(probe);
+    let port = unused_port();
 
     let report = find_listeners(port, Protocol::Tcp).expect("lookup");
     assert!(
@@ -232,9 +254,7 @@ fn cli_output_is_plain_when_piped() {
 
 #[test]
 fn cli_exits_one_when_nothing_is_listening() {
-    let probe = TcpListener::bind("127.0.0.1:0").expect("bind");
-    let port = probe.local_addr().unwrap().port();
-    drop(probe);
+    let port = unused_port();
 
     let output = Command::new(binary())
         .arg(port.to_string())
