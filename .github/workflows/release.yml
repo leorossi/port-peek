@@ -36,7 +36,7 @@ jobs:
           - os: ubuntu-24.04-arm
             target: aarch64-unknown-linux-musl
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
@@ -77,7 +77,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Verify tag matches Cargo.toml
         run: |
           python3 - <<'PY'
@@ -115,7 +115,7 @@ jobs:
     if: ${{ vars.PUBLISH_CRATES_IO == 'true' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo publish --locked
         env:
