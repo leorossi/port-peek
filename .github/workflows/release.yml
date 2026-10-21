@@ -64,7 +64,7 @@ jobs:
           else
             shasum -a 256 "portpeek-${{ matrix.target }}.tar.gz" > "portpeek-${{ matrix.target }}.tar.gz.sha256"
           fi
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: portpeek-${{ matrix.target }}
           path: |
