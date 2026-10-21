@@ -175,7 +175,7 @@ fn render_table(rows: &[Row], color: bool) -> String {
     let top = format!("┌{label_border}┬{value_border}┐");
     let _ = writeln!(out, "{}", paint(&top, STYLE_BORDER, color));
 
-    for row in rows {
+    for (index, row) in rows.iter().enumerate() {
         let label = pad_to(row.label, label_width);
         let value = pad_to(&row.value, value_width);
         let _ = writeln!(
@@ -184,6 +184,11 @@ fn render_table(rows: &[Row], color: bool) -> String {
             paint(&label, STYLE_LABEL, color),
             paint(&value, row.style, color)
         );
+
+        if index + 1 < rows.len() {
+            let separator = format!("├{label_border}┼{value_border}┤");
+            let _ = writeln!(out, "{}", paint(&separator, STYLE_BORDER, color));
+        }
     }
 
     let bottom = format!("└{label_border}┴{value_border}┘");
@@ -315,6 +320,7 @@ mod tests {
         assert!(text.contains("Working dir"));
         assert!(text.contains("/tmp/app"));
         assert!(text.contains('┌'));
+        assert!(text.contains('├'));
         assert!(text.contains('┘'));
     }
 
