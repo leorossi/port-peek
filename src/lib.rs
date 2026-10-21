@@ -7,16 +7,19 @@
 //! - Linux: `NETLINK_SOCK_DIAG` for the socket table, then `/proc` for the
 //!   inode-to-PID mapping and process metadata.
 //!
-//! No `lsof`, `netstat`, or `ss` output is parsed.
+//! Docker-forwarded ports are annotated with container metadata from the local
+//! Docker Engine API. No `lsof`, `netstat`, `ss`, or `docker` output is parsed.
 
 pub mod cli;
+#[cfg(unix)]
+mod docker;
 mod error;
 mod model;
 pub mod output;
 mod platform;
 
 pub use error::{Error, Result};
-pub use model::{Listener, Protocol, Report, shell_join};
+pub use model::{ContainerInfo, Listener, Protocol, Report, shell_join};
 
 /// Look up listeners for `port` using the requested protocol.
 ///
@@ -29,6 +32,8 @@ pub fn find_listeners(port: u16, protocol: Protocol) -> Result<Report> {
         ));
     }
 
-    let listeners = platform::find_listeners(port, protocol)?;
+    let mut listeners = platform::find_listeners(port, protocol)?;
+    #[cfg(unix)]
+    docker::annotate(&mut listeners);
     Ok(Report::new(port, protocol, listeners).normalized())
 }

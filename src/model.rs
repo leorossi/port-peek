@@ -50,6 +50,9 @@ pub struct Listener {
     pub protocol: Protocol,
     pub ip: IpAddr,
     pub port: u16,
+    /// Container metadata when the host listener is a Docker forwarder.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub container: Option<ContainerInfo>,
 }
 
 impl Listener {
@@ -57,6 +60,35 @@ impl Listener {
     #[must_use]
     pub fn endpoint(&self) -> String {
         SocketAddr::new(self.ip, self.port).to_string()
+    }
+}
+
+/// Metadata for the container behind a Docker-forwarded host port.
+///
+/// This is read from the local Docker Engine API, not from process command
+/// output. It is present only when the host listener belongs to a Docker
+/// forwarder and the daemon can be queried.
+#[derive(Debug, Clone, Serialize)]
+pub struct ContainerInfo {
+    /// Full container ID.
+    pub id: String,
+    pub name: String,
+    pub image: String,
+    pub internal_port: u16,
+    pub protocol: Protocol,
+    /// Command recorded by Docker, omitted by `--no-command`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub command: Option<String>,
+    /// Docker Compose project, when the container has the standard label.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub compose_project: Option<String>,
+}
+
+impl ContainerInfo {
+    /// First 12 characters of the container ID, as used by Docker tooling.
+    #[must_use]
+    pub fn short_id(&self) -> &str {
+        self.id.get(..12).unwrap_or(&self.id)
     }
 }
 
@@ -166,6 +198,7 @@ mod tests {
             protocol: Protocol::Tcp,
             ip: ip.parse().unwrap(),
             port: 8080,
+            container: None,
         }
     }
 

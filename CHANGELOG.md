@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Docker container metadata for forwarded ports. When the host listener is
+  Docker Desktop's `com.docker.backend`, a `docker-proxy`, or `vpnkit`,
+  `portpeek` queries the local Docker Engine API over its Unix socket and shows
+  the container name, ID, image, internal port, command, and Compose project.
+- The optional JSON `container` object on Docker-forwarded listeners.
+- `--no-command` also removes the command from container metadata.
+
 ## [0.1.0] - 2026-10-21
 
 ### Added

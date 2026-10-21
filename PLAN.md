@@ -90,10 +90,25 @@ Legend: `[ ]` pending · `[x]` done and verified.
 - [x] Issue templates and pull-request template
 - [x] Final review, `cargo package`, initial git commit
 
-## 7. Final verification
+## 7. Docker-forwarded ports
 
-- [x] All tests pass locally on macOS (18 unit, 9 integration)
-- [x] Linux tests pass on Ubuntu 26.04 aarch64 (19 unit, 9 integration)
+- [x] Recognize Docker Desktop (`com.docker.backend`), `docker-proxy`, and
+      `vpnkit` host listeners
+- [x] Query the Docker Engine API over a Unix socket without executing `docker`
+- [x] Decode HTTP chunked responses and parse the container list
+- [x] Match published ports by host port, protocol, and listener address
+- [x] Add optional container ID, name, image, internal port, command, and
+      Compose project to the model, human output, and JSON
+- [x] Make `--no-command` remove Docker container commands as well
+- [x] Unit-test forwarder detection, HTTP/chunked parsing, matching, and output
+- [x] Manual test against a real Docker Desktop container on port 8000
+
+## 8. Final verification
+
+- [x] All tests pass locally on macOS (31 unit, 9 integration)
+- [x] Linux tests passed on Ubuntu 26.04 aarch64 before the Docker addition;
+      the Docker code cross-compiles and is covered by platform-independent
+      unit tests
 - [x] Linux code compiles and Clippy-clean for `x86_64` and `aarch64`
 - [x] `cargo clippy --all-targets --all-features -- -D warnings`
 - [x] `cargo fmt --check`
@@ -107,10 +122,13 @@ Legend: `[ ]` pending · `[x]` done and verified.
 ## Verification notes (2026-10-21)
 
 - **macOS 15, arm64:** `cargo test`, `cargo clippy`, `cargo fmt --check`,
-  `cargo package`, MSRV 1.85 test suite, and manual TCP/UDP/IPv6 lookups.
+  `cargo package`, MSRV 1.85 test suite, manual TCP/UDP/IPv6 lookups, and a
+  Docker Desktop lookup on port 8000 showing the container name, image,
+  internal port, Compose project, and container command.
 - **Linux aarch64 (Ubuntu 26.04 Lima VM):** full test suite, Clippy, fmt,
   static musl build, glibc release archive, and unprivileged vs `sudo`
-  attribution.
+  attribution. The Docker client is platform-independent and cross-compiles for
+  both Linux targets.
 - **Linux x86_64:** cross-compiled and Clippy-checked on macOS; the native
   x86_64 runner in CI runs the full suite.
 - Release archives contain `portpeek`, `README.md`, and both license files.

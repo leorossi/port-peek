@@ -13,6 +13,8 @@
 `portpeek` shows the process ID, executable, **full command line**, working
 directory, and local IP address of every listener on a port. It calls kernel
 interfaces directly — it never parses the output of `lsof`, `netstat`, or `ss`.
+For ports forwarded by Docker, it also identifies the container behind the
+forwarder.
 
 ```console
 $ portpeek 8080
@@ -33,6 +35,8 @@ PID 4242 · node
 - Working directory
 - IPv4 and IPv6 bindings, including `0.0.0.0` and `::`
 - Multiple listeners on the same port, grouped by process
+- Docker container name, ID, image, and internal port for forwarded ports
+  (read from the local Docker Engine API)
 - TCP by default, UDP with `--udp`
 - Human-readable cards or stable JSON
 - Linux static (musl) and glibc binaries, x86_64 and aarch64
@@ -177,7 +181,7 @@ $ portpeek [OPTIONS] <PORT>
 | --- | --- |
 | `--udp` | Inspect UDP sockets instead of TCP |
 | `--json` | Print machine-readable JSON |
-| `--no-command` | Omit `argv`/`command` from human and JSON output |
+| `--no-command` | Omit `argv`/`command`, including Docker container commands |
 | `-h, --help` | Show help |
 | `-V, --version` | Show version |
 
@@ -197,6 +201,38 @@ omitted.
 The command is shown with POSIX shell escaping so it can be copied into a
 shell. The original quoting cannot be recovered from `argv`; the `argv` array in
 JSON is the most faithful form available.
+
+### Docker-forwarded ports
+
+Docker Desktop on macOS forwards published ports through `com.docker.backend`;
+on Linux, `docker-proxy` usually owns the host socket. `portpeek` recognizes
+these forwarders, asks the local Docker Engine API which container publishes the
+port, and adds the container metadata to the report:
+
+```console
+$ portpeek 8000
+TCP 8000 · 1 process
+
+PID 98560 · com.docker.backend
+  exe        /Applications/Docker.app/Contents/MacOS/com.docker.backend
+  container  telemetry-demo-app (9f8cac51baba)
+  image      telemetry-demo-app
+  internal   8000/tcp
+  compose    2026-10-14-laravel-telemetry-talk
+  listening  [::]:8000
+  cmd        entrypoint.sh php artisan serve --host=0.0.0.0 --port=8000
+  cwd        /Users/leo/Library/Containers/com.docker.docker/Data
+```
+
+The API request is made directly over a Unix socket; no `docker` command is
+executed and no command output is parsed. `portpeek` tries `DOCKER_HOST` when it
+is a `unix://` address, `/var/run/docker.sock`,
+`$XDG_RUNTIME_DIR/docker.sock`, `~/.docker/run/docker.sock`, and
+`~/.colima/default/docker.sock`.
+
+This lookup is automatic and best-effort. If the socket is unavailable or the
+daemon cannot be reached, the normal forwarder details are shown. `--no-command`
+also removes the container command from human and JSON output.
 
 ### JSON
 
@@ -224,6 +260,28 @@ One object is emitted per listening socket. If a socket is visible but its owner
 cannot be inspected, `pid` and the process fields are `null` and the entry is
 still included.
 
+When a listener is a Docker forwarder, the object also contains a `container`
+object. Its presence is optional; `--no-command` removes `command` from it:
+
+```json
+{
+  "pid": 98560,
+  "process": "com.docker.backend",
+  "protocol": "tcp",
+  "ip": "::",
+  "port": 8000,
+  "container": {
+    "id": "9f8cac51baba9eede78bf7fd180ba5d9d655b765e021b2b180f2318ad7c64fd5",
+    "name": "telemetry-demo-app",
+    "image": "telemetry-demo-app",
+    "internal_port": 8000,
+    "protocol": "tcp",
+    "command": "entrypoint.sh php artisan serve --host=0.0.0.0 --port=8000",
+    "compose_project": "2026-10-14-laravel-telemetry-talk"
+  }
+}
+```
+
 ### Exit codes
 
 | Code | Meaning |
@@ -241,6 +299,9 @@ Kernel metadata is protected per user:
   visible at all; on Linux, the socket is usually visible but its owner is not.
 - **With `sudo`**, all normal processes are resolved. A few SIP-protected macOS
   system processes may still hide some details.
+- Docker metadata needs read access to the Docker Engine Unix socket. On Linux
+  that usually means root or membership in the `docker` group; without access,
+  only the forwarder is reported.
 - `portpeek` is **not** setuid and does not require a daemon.
 
 If a socket is visible but its owner is not, it is shown with `PID ?` and a note
@@ -284,6 +345,15 @@ used by `lsof` and `ps`. The layout structs are isolated in
 
 No external command is executed.
 
+### Docker metadata
+
+- A listener whose executable is Docker Desktop's `com.docker.backend`, a
+  `docker-proxy`, or `vpnkit` is treated as a port forwarder.
+- `portpeek` sends `GET /containers/json?all=0` to the Docker Engine API over a
+  local Unix socket and decodes the HTTP/chunked response directly.
+- Published ports are matched by host port, transport protocol, and listener
+  address (an exact address wins over a wildcard).
+
 ## Limitations
 
 - **Command lines can contain secrets.** Tokens and passwords often appear in
@@ -295,9 +365,10 @@ No external command is executed.
 - If several processes inherit the same listening socket, the lowest PID is
   reported for that socket.
 - **Docker:** on macOS the VM forwards ports through
-  `com.docker.backend`/vpnkit, so you will see the forwarder, not the container
-  process. On Linux, a published port is usually held by `docker-proxy` in the
-  host network namespace.
+  `com.docker.backend`/vpnkit; on Linux, a published port is usually held by
+  `docker-proxy` in the host network namespace. `portpeek` enriches these
+  forwarders with container metadata when the Docker API socket is readable.
+  Without access to the socket, only the forwarder is shown.
 - Linux containers with a separate PID namespace or `hidepid` may limit
   attribution; `portpeek` sees the namespace it runs in.
 
