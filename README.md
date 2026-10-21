@@ -41,6 +41,110 @@ PID 4242 · node
 
 ## Installation
 
+### Build and run from a checkout
+
+From the directory that contains `Cargo.toml`:
+
+```console
+$ cargo build
+$ ./target/debug/portpeek 8080
+```
+
+Cargo writes the debug binary to `target/debug/portpeek`. You can also run it
+from inside that directory:
+
+```console
+$ cd target/debug
+$ ./portpeek 8080
+```
+
+To compile and run in one step:
+
+```console
+$ cargo run -- 8080
+```
+
+For an optimized binary:
+
+```console
+$ cargo build --release --locked
+$ ./target/release/portpeek 8080
+```
+
+or:
+
+```console
+$ cargo run --release -- 8080
+```
+
+Pass portpeek options after `--`, for example:
+
+```console
+$ cargo run -- 53 --udp
+$ cargo run -- 8080 --json
+```
+
+If you do not have the source yet:
+
+```console
+$ git clone https://github.com/leorossi/portpeek.git
+$ cd portpeek
+$ cargo build --release
+```
+
+### Install from a checkout
+
+The simplest system install uses Cargo:
+
+```console
+$ cargo install --path . --locked
+```
+
+This installs `portpeek` into Cargo's binary directory (`~/.cargo/bin` by
+default). Ensure that directory is on your `PATH`, then run:
+
+```console
+$ portpeek 8080
+```
+
+After changing the source, reinstall with:
+
+```console
+$ cargo install --path . --locked --force
+```
+
+Uninstall it with:
+
+```console
+$ cargo uninstall portpeek
+```
+
+To install the optimized binary directly instead:
+
+```console
+$ cargo build --release --locked
+$ sudo install -d /usr/local/bin
+$ sudo install -m 0755 target/release/portpeek /usr/local/bin/portpeek
+```
+
+Without `sudo`, install it for your user:
+
+```console
+$ mkdir -p "$HOME/.local/bin"
+$ install -m 0755 target/release/portpeek "$HOME/.local/bin/portpeek"
+```
+
+Make sure `$HOME/.local/bin` is on your `PATH`. Remove the binary with
+`sudo rm /usr/local/bin/portpeek` or `rm "$HOME/.local/bin/portpeek"`.
+
+To inspect processes owned by other users, build first and then run the installed
+binary with `sudo`. If it is in `~/.cargo/bin`, use the full path because `sudo`
+may not include that directory in `PATH`:
+
+```console
+$ sudo "$HOME/.cargo/bin/portpeek" 443
+```
+
 ### Prebuilt binary
 
 Download the archive for your platform from the
@@ -55,18 +159,12 @@ $ sudo mv portpeek /usr/local/bin/
 Linux glibc archives are built on Ubuntu 24.04. On an older distribution, use the
 static musl archive instead.
 
-### Cargo
+### Install from crates.io
+
+After the crate is published:
 
 ```console
 $ cargo install portpeek
-```
-
-### From source
-
-```console
-$ git clone https://github.com/leorossi/portpeek.git
-$ cd portpeek
-$ cargo install --path .
 ```
 
 ## Usage
