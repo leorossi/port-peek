@@ -315,3 +315,42 @@ fn cli_json_contains_the_listener_and_respects_no_command() {
         assert!(listener.get("command").is_none());
     }
 }
+
+#[test]
+fn cli_wraps_long_commands_to_columns() {
+    let directory = tempfile::tempdir().expect("tempdir");
+    let long_argument = "--option=".to_owned() + &"x".repeat(40) + " " + &"y".repeat(40);
+    let (child, port) = spawn_python_listener(directory.path(), &[&long_argument]);
+    wait_for(port, child.id(), Protocol::Tcp)
+        .unwrap_or_else(|| panic!("child listener on {port} not found"));
+
+    let output = Command::new(binary())
+        .arg(port.to_string())
+        .env("COLUMNS", "70")
+        .output()
+        .expect("run portpeek");
+    assert!(output.status.success());
+    let text = String::from_utf8_lossy(&output.stdout);
+    for line in text.lines().skip(2) {
+        assert!(
+            line.chars().count() <= 70,
+            "line too wide: {line:?}\n{text}"
+        );
+    }
+    assert!(
+        text.lines().filter(|line| line.contains('y')).count() >= 1
+            && text.lines().filter(|line| line.contains("xxxx")).count() >= 1,
+        "{text}"
+    );
+
+    let unwrapped = Command::new(binary())
+        .arg(port.to_string())
+        .env_remove("COLUMNS")
+        .output()
+        .expect("run portpeek");
+    let unwrapped = String::from_utf8_lossy(&unwrapped.stdout);
+    assert!(
+        unwrapped.lines().any(|line| line.chars().count() > 70),
+        "piped output without COLUMNS should not wrap:\n{unwrapped}"
+    );
+}

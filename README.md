@@ -211,6 +211,12 @@ The command is shown with POSIX shell escaping so it can be copied into a
 shell. The original quoting cannot be recovered from `argv`; the `argv` array in
 JSON is the most faithful form available.
 
+Tables fit the terminal width. Long values, such as a command line, are
+wrapped onto continuation lines, breaking at spaces where possible. The width
+comes from `COLUMNS` when it is set, otherwise from the terminal. Piped output
+without `COLUMNS` is not wrapped, so each value stays on one line for `grep`.
+Use `--json` when you need a command to copy verbatim.
+
 Human-readable output uses ANSI colors when stdout is a terminal. Colors are
 disabled automatically when output is piped or redirected, when `NO_COLOR` is
 set, or when `--no-color` is passed.

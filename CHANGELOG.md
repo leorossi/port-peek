@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `--no-command` also removes the command from container metadata.
 - Colorized, aligned tables for human-readable output, with row separators,
   automatic color detection, and `--no-color`/`NO_COLOR` support.
+- Tables fit the terminal width (or `COLUMNS`), wrapping long values such as
+  command lines onto multiple lines.
 
 ### Fixed
 

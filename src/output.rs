@@ -25,6 +25,21 @@ pub fn to_human(report: &Report, no_command: bool) -> String {
 /// whether stdout is a terminal and whether the user opted out.
 #[must_use]
 pub fn to_human_colored(report: &Report, no_command: bool, color: bool) -> String {
+    to_human_wrapped(report, no_command, color, None)
+}
+
+/// Render a human-readable report that fits in `max_width` columns.
+///
+/// Values that would make a table wider than `max_width` (typically the
+/// terminal width) are wrapped onto continuation lines, breaking at spaces
+/// where possible. With `None`, tables grow to fit their longest value.
+#[must_use]
+pub fn to_human_wrapped(
+    report: &Report,
+    no_command: bool,
+    color: bool,
+    max_width: Option<usize>,
+) -> String {
     let normalized = report.clone().normalized();
     let report = &normalized;
     let mut out = String::new();
@@ -51,13 +66,18 @@ pub fn to_human_colored(report: &Report, no_command: bool, color: bool) -> Strin
         if index > 0 {
             out.push('\n');
         }
-        out.push_str(&process_table(group, no_command, color));
+        out.push_str(&process_table(group, no_command, color, max_width));
     }
 
     out
 }
 
-fn process_table(group: &[crate::model::Listener], no_command: bool, color: bool) -> String {
+fn process_table(
+    group: &[crate::model::Listener],
+    no_command: bool,
+    color: bool,
+    max_width: Option<usize>,
+) -> String {
     let first = &group[0];
     let mut rows = Vec::new();
 
@@ -137,7 +157,7 @@ fn process_table(group: &[crate::model::Listener], no_command: bool, color: bool
         ));
     }
 
-    render_table(&rows, color)
+    render_table(&rows, color, max_width)
 }
 
 struct Row {
@@ -156,17 +176,26 @@ impl Row {
     }
 }
 
-fn render_table(rows: &[Row], color: bool) -> String {
+/// Columns used by borders and padding: `│ `, ` │ `, and ` │`.
+const TABLE_CHROME: usize = 7;
+/// Narrowest value column; below this, wrapping hurts more than overflowing.
+const MIN_VALUE_WIDTH: usize = 16;
+
+fn render_table(rows: &[Row], color: bool, max_width: Option<usize>) -> String {
     let label_width = rows
         .iter()
         .map(|row| row.label.chars().count())
         .max()
         .unwrap_or(0);
-    let value_width = rows
+    let natural_width = rows
         .iter()
         .map(|row| row.value.chars().count())
         .max()
         .unwrap_or(0);
+    let value_width = max_width.map_or(natural_width, |max| {
+        let available = max.saturating_sub(label_width + TABLE_CHROME);
+        natural_width.min(available.max(MIN_VALUE_WIDTH))
+    });
 
     let label_border = "─".repeat(label_width + 2);
     let value_border = "─".repeat(value_width + 2);
@@ -176,14 +205,17 @@ fn render_table(rows: &[Row], color: bool) -> String {
     let _ = writeln!(out, "{}", paint(&top, STYLE_BORDER, color));
 
     for (index, row) in rows.iter().enumerate() {
-        let label = pad_to(row.label, label_width);
-        let value = pad_to(&row.value, value_width);
-        let _ = writeln!(
-            out,
-            "│ {} │ {} │",
-            paint(&label, STYLE_LABEL, color),
-            paint(&value, row.style, color)
-        );
+        for (line_index, line) in wrap(&row.value, value_width).iter().enumerate() {
+            let label = if line_index == 0 { row.label } else { "" };
+            let label = pad_to(label, label_width);
+            let value = pad_to(line, value_width);
+            let _ = writeln!(
+                out,
+                "│ {} │ {} │",
+                paint(&label, STYLE_LABEL, color),
+                paint(&value, row.style, color)
+            );
+        }
 
         if index + 1 < rows.len() {
             let separator = format!("├{label_border}┼{value_border}┤");
@@ -194,6 +226,48 @@ fn render_table(rows: &[Row], color: bool) -> String {
     let bottom = format!("└{label_border}┴{value_border}┘");
     let _ = writeln!(out, "{}", paint(&bottom, STYLE_BORDER, color));
     out
+}
+
+/// Split `text` into lines of at most `width` characters.
+///
+/// Lines break at spaces when possible; words longer than `width` are split.
+fn wrap(text: &str, width: usize) -> Vec<String> {
+    if width == 0 || text.chars().count() <= width {
+        return vec![text.to_owned()];
+    }
+
+    let mut lines = Vec::new();
+    let mut current = String::new();
+    let mut length = 0;
+
+    for word in text.split(' ') {
+        let word_length = word.chars().count();
+        let separator = usize::from(length > 0);
+        if length + separator + word_length <= width {
+            if separator == 1 {
+                current.push(' ');
+            }
+            current.push_str(word);
+            length += separator + word_length;
+            continue;
+        }
+
+        if length > 0 {
+            lines.push(std::mem::take(&mut current));
+        }
+
+        let mut chars = word.chars().collect::<Vec<_>>();
+        while chars.len() > width {
+            lines.push(chars.drain(..width).collect());
+        }
+        current = chars.into_iter().collect();
+        length = current.chars().count();
+    }
+
+    if length > 0 || lines.is_empty() {
+        lines.push(current);
+    }
+    lines
 }
 
 fn pad_to(text: &str, width: usize) -> String {
@@ -376,6 +450,112 @@ mod tests {
         let json = to_json(&docker_sample(), false).unwrap();
         assert!(json.contains("\"container\""));
         assert!(json.contains("entrypoint.sh php artisan serve"));
+    }
+
+    fn long_command_sample() -> Report {
+        let mut report = sample();
+        let command = format!(
+            "node server.js --port 8080 --config {} --verbose",
+            "/very/long/path/".repeat(8)
+        );
+        for listener in &mut report.listeners {
+            listener.command = Some(command.clone());
+        }
+        report
+    }
+
+    fn line_widths(text: &str) -> Vec<usize> {
+        text.lines().map(|line| line.chars().count()).collect()
+    }
+
+    #[test]
+    fn wraps_long_values_to_fit_the_width() {
+        let text = to_human_wrapped(&long_command_sample(), false, false, Some(60));
+        let table = text.lines().skip(2).collect::<Vec<_>>().join("\n");
+        let widths = line_widths(&table);
+        assert!(
+            widths.iter().all(|&width| width == 60),
+            "{widths:?}\n{table}"
+        );
+
+        // The command is split across several lines, and only the first one
+        // carries the label.
+        let command_lines = table
+            .lines()
+            .skip_while(|line| !line.contains("Command"))
+            .take_while(|line| !line.starts_with('├'))
+            .collect::<Vec<_>>();
+        assert!(command_lines.len() > 1, "{table}");
+        assert!(command_lines[1].starts_with("│             │ "));
+
+        // Nothing is lost: joining the wrapped pieces restores the command.
+        let joined = command_lines
+            .iter()
+            .map(|line| line.split('│').nth(2).unwrap().trim())
+            .collect::<Vec<_>>()
+            .join(" ");
+        assert_eq!(
+            joined.replace(' ', ""),
+            long_command_sample().listeners[0]
+                .command
+                .clone()
+                .unwrap()
+                .replace(' ', "")
+        );
+    }
+
+    #[test]
+    fn colored_wrapping_matches_the_plain_layout() {
+        let mut report = long_command_sample();
+        report.listeners[0].cwd = Some("/a/deeply/nested/working/directory/".repeat(4).into());
+        let colored = to_human_wrapped(&report, false, true, Some(60));
+        let plain = to_human_wrapped(&report, false, false, Some(60));
+
+        let mut stripped = String::new();
+        let mut in_escape = false;
+        for character in colored.chars() {
+            match (in_escape, character) {
+                (false, '\x1b') => in_escape = true,
+                (true, 'm') => in_escape = false,
+                (false, character) => stripped.push(character),
+                (true, _) => {}
+            }
+        }
+        assert_eq!(stripped, plain);
+
+        // Each wrapped working-directory line is styled on its own, so a
+        // style never leaks across the table border.
+        let dim_lines = colored
+            .lines()
+            .filter(|line| line.starts_with('│') && line.contains("\x1b[2m"))
+            .count();
+        assert!(dim_lines > 1, "{colored}");
+    }
+
+    #[test]
+    fn short_tables_are_not_padded_to_the_width() {
+        let wrapped = to_human_wrapped(&sample(), false, false, Some(200));
+        assert_eq!(wrapped, to_human(&sample(), false));
+    }
+
+    #[test]
+    fn very_narrow_widths_keep_a_minimum_value_column() {
+        let text = to_human_wrapped(&long_command_sample(), false, false, Some(10));
+        let widths = line_widths(&text.lines().skip(2).collect::<Vec<_>>().join("\n"));
+        assert!(
+            widths
+                .iter()
+                .all(|&width| width == "Working dir".len() + TABLE_CHROME + MIN_VALUE_WIDTH)
+        );
+    }
+
+    #[test]
+    fn wrap_prefers_spaces_and_splits_long_words() {
+        assert_eq!(wrap("aaa bbb ccc", 7), ["aaa bbb", "ccc"]);
+        assert_eq!(wrap("abcdefghij", 4), ["abcd", "efgh", "ij"]);
+        assert_eq!(wrap("ab abcdefghij", 4), ["ab", "abcd", "efgh", "ij"]);
+        assert_eq!(wrap("short", 10), ["short"]);
+        assert_eq!(wrap("", 10), [""]);
     }
 
     #[test]
