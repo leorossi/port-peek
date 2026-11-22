@@ -1,11 +1,13 @@
 use std::env;
 use std::io::{self, IsTerminal, Write};
 use std::process::ExitCode;
+use std::thread;
+use std::time::{Duration, Instant};
 
 use clap::Parser;
 
 use portpeek::cli::Cli;
-use portpeek::{Error, find_listeners, output};
+use portpeek::{Error, Report, find_listeners, output};
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
@@ -19,6 +21,9 @@ fn main() -> ExitCode {
         }
     }
 }
+
+/// How long `--kill` waits for signalled processes to release the port.
+const KILL_TIMEOUT: Duration = Duration::from_secs(3);
 
 fn run(cli: Cli) -> Result<bool, Error> {
     let report = find_listeners(cli.port, cli.protocol())?;
@@ -34,7 +39,75 @@ fn run(cli: Cli) -> Result<bool, Error> {
     };
 
     write_stdout(&text)?;
-    Ok(!report.is_empty())
+    if report.is_empty() {
+        return Ok(false);
+    }
+
+    if cli.kill {
+        kill(&cli, &report)?;
+    }
+    Ok(true)
+}
+
+/// Run `--kill`. Messages go to stderr so `--json` output stays parseable.
+#[cfg(unix)]
+fn kill(cli: &Cli, report: &Report) -> Result<(), Error> {
+    use portpeek::kill::{kill_listeners, send_sigterm};
+
+    let mut stderr = io::stderr().lock();
+    let outcome = kill_listeners(
+        report,
+        cli.force,
+        &mut io::stdin().lock(),
+        &mut stderr,
+        send_sigterm,
+    )?;
+
+    // Wait for each signalled process to stop listening. A zombie keeps its
+    // PID but not its sockets, so the port is what matters.
+    let deadline = Instant::now() + KILL_TIMEOUT;
+    let mut pending = outcome.signalled;
+    while !pending.is_empty() {
+        let current = find_listeners(cli.port, cli.protocol())?;
+        pending.retain(|process| {
+            let listening = current
+                .listeners
+                .iter()
+                .any(|listener| listener.pid == Some(process.pid));
+            if !listening {
+                let _ = writeln!(stderr, "PID {} ({}) stopped.", process.pid, process.name);
+            }
+            listening
+        });
+        if pending.is_empty() || Instant::now() >= deadline {
+            break;
+        }
+        thread::sleep(Duration::from_millis(50));
+    }
+
+    for process in &pending {
+        let _ = writeln!(
+            stderr,
+            "PID {0} ({1}) is still listening after {2}s; it may be shutting down or \
+             ignoring SIGTERM. To force it: kill -9 {0}",
+            process.pid,
+            process.name,
+            KILL_TIMEOUT.as_secs()
+        );
+    }
+
+    let failed = outcome.failed + pending.len();
+    if failed == 0 {
+        Ok(())
+    } else {
+        let noun = if failed == 1 { "process" } else { "processes" };
+        Err(Error::Backend(format!("could not kill {failed} {noun}")))
+    }
+}
+
+#[cfg(not(unix))]
+fn kill(_cli: &Cli, _report: &Report) -> Result<(), Error> {
+    Err(Error::UnsupportedPlatform)
 }
 
 fn colors_enabled(cli: &Cli) -> bool {

@@ -30,6 +30,14 @@ pub struct Cli {
     /// Disable ANSI colors in human-readable output
     #[arg(long)]
     pub no_color: bool,
+
+    /// Terminate the listening processes with SIGTERM, after confirmation
+    #[arg(long)]
+    pub kill: bool,
+
+    /// With --kill, do not ask for confirmation
+    #[arg(long, requires = "kill")]
+    pub force: bool,
 }
 
 impl Cli {
@@ -67,6 +75,25 @@ mod tests {
     fn parses_no_color() {
         let cli = Cli::try_parse_from(["portpeek", "3000", "--no-color"]).unwrap();
         assert!(cli.no_color);
+    }
+
+    #[test]
+    fn parses_kill_and_force() {
+        let cli = Cli::try_parse_from(["portpeek", "3000"]).unwrap();
+        assert!(!cli.kill);
+        assert!(!cli.force);
+
+        let cli = Cli::try_parse_from(["portpeek", "3000", "--kill"]).unwrap();
+        assert!(cli.kill);
+        assert!(!cli.force);
+
+        let cli = Cli::try_parse_from(["portpeek", "3000", "--kill", "--force"]).unwrap();
+        assert!(cli.kill && cli.force);
+    }
+
+    #[test]
+    fn force_requires_kill() {
+        assert!(Cli::try_parse_from(["portpeek", "3000", "--force"]).is_err());
     }
 
     #[test]

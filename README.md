@@ -191,6 +191,8 @@ $ portpeek [OPTIONS] <PORT>
 | `--json` | Print machine-readable JSON |
 | `--no-command` | Omit `argv`/`command`, including Docker container commands |
 | `--no-color` | Disable ANSI colors in human-readable output |
+| `--kill` | Terminate the listening processes with `SIGTERM`, after confirmation |
+| `--force` | With `--kill`, do not ask for confirmation |
 | `-h, --help` | Show help |
 | `-V, --version` | Show version |
 
@@ -201,7 +203,32 @@ $ portpeek 3000
 $ portpeek 5432 --json
 $ portpeek 53 --udp
 $ sudo portpeek 443
+$ portpeek 3000 --kill
+$ portpeek 3000 --kill --force
 ```
+
+### Killing the listener
+
+`--kill` prints the report, then asks before sending `SIGTERM` to each process
+listening on the port:
+
+```console
+$ portpeek 3000 --kill
+...
+Kill PID 4242 (node) on 127.0.0.1:3000? [y/N] y
+Sent SIGTERM to PID 4242 (node).
+PID 4242 (node) stopped.
+```
+
+Only `y` or `yes` confirms; anything else, or closed stdin, leaves the process
+running. `--force` skips the question. Prompts and results go to stderr, so
+`--json --kill` still writes clean JSON to stdout.
+
+`portpeek` waits up to 3 seconds for each process to release the port and
+reports any that are still listening. It does not escalate to `SIGKILL`. It
+refuses to kill PID 1, sockets whose owner is not visible, and Docker
+forwarders (use `docker stop <container>` instead, so Docker Desktop or
+`docker-proxy` keeps running). Killing another user's process requires `sudo`.
 
 For UDP, `portpeek` reports unconnected sockets bound to the port (the
 equivalent of `ss -u -l`). Connected UDP sockets are not servers and are
@@ -318,8 +345,10 @@ object. Its presence is optional; `--no-command` removes `command` from it:
 | Code | Meaning |
 | --- | --- |
 | `0` | At least one listener was found |
-| `1` | No listener was found |
-| `2` | Invalid usage or a backend error |
+| `1` | No listener was found (with `--kill`, nothing was killed) |
+| `2` | Invalid usage, a backend error, or `--kill` could not stop a process |
+
+Declining the `--kill` prompt is not an error and exits with `0`.
 
 ## Permissions
 

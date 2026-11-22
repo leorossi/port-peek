@@ -14,6 +14,8 @@ pub mod cli;
 #[cfg(unix)]
 mod docker;
 mod error;
+#[cfg(unix)]
+pub mod kill;
 mod model;
 pub mod output;
 mod platform;

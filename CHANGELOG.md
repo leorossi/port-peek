@@ -19,6 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   automatic color detection, and `--no-color`/`NO_COLOR` support.
 - Tables fit the terminal width (or `COLUMNS`), wrapping long values such as
   command lines onto multiple lines.
+- `--kill` terminates the listening processes with `SIGTERM` after asking for
+  confirmation; `--force` skips the question. Docker forwarders, PID 1, and
+  sockets with an unknown owner are never killed.
 
 ### Fixed
 

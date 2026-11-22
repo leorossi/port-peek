@@ -354,3 +354,103 @@ fn cli_wraps_long_commands_to_columns() {
         "piped output without COLUMNS should not wrap:\n{unwrapped}"
     );
 }
+
+fn run_kill(port: u16, args: &[&str], stdin: &str) -> std::process::Output {
+    use std::io::Write;
+
+    let mut process = Command::new(binary())
+        .arg(port.to_string())
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("run portpeek");
+    process
+        .stdin
+        .take()
+        .expect("piped stdin")
+        .write_all(stdin.as_bytes())
+        .expect("write answer");
+    process.wait_with_output().expect("wait for portpeek")
+}
+
+fn exited_within(child: &mut ChildGuard, timeout: Duration) -> bool {
+    let deadline = Instant::now() + timeout;
+    loop {
+        if child.0.try_wait().expect("try_wait").is_some() {
+            return true;
+        }
+        if Instant::now() >= deadline {
+            return false;
+        }
+        thread::sleep(Duration::from_millis(50));
+    }
+}
+
+#[test]
+fn cli_kill_force_terminates_the_listener_without_asking() {
+    let directory = tempfile::tempdir().expect("tempdir");
+    let (mut child, port) = spawn_python_listener(directory.path(), &[]);
+    wait_for(port, child.id(), Protocol::Tcp).expect("child listener not found");
+
+    let output = run_kill(port, &["--kill", "--force"], "");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(0), "stderr: {stderr}");
+    assert!(!stderr.contains("[y/N]"), "stderr: {stderr}");
+    assert!(stderr.contains("stopped."), "stderr: {stderr}");
+    assert!(exited_within(&mut child, Duration::from_secs(5)));
+}
+
+#[test]
+fn cli_kill_asks_and_kills_on_yes() {
+    let directory = tempfile::tempdir().expect("tempdir");
+    let (mut child, port) = spawn_python_listener(directory.path(), &[]);
+    wait_for(port, child.id(), Protocol::Tcp).expect("child listener not found");
+
+    let output = run_kill(port, &["--kill"], "y\n");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(0), "stderr: {stderr}");
+    assert!(
+        stderr.contains(&format!("Kill PID {}", child.id())),
+        "stderr: {stderr}"
+    );
+    assert!(exited_within(&mut child, Duration::from_secs(5)));
+}
+
+#[test]
+fn cli_kill_leaves_the_process_running_when_declined() {
+    let directory = tempfile::tempdir().expect("tempdir");
+    let (mut child, port) = spawn_python_listener(directory.path(), &[]);
+    wait_for(port, child.id(), Protocol::Tcp).expect("child listener not found");
+
+    for answer in ["n\n", ""] {
+        let output = run_kill(port, &["--kill"], answer);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert_eq!(output.status.code(), Some(0), "stderr: {stderr}");
+        assert!(stderr.contains("running."), "stderr: {stderr}");
+        assert!(!exited_within(&mut child, Duration::from_millis(200)));
+    }
+    assert!(wait_for(port, child.id(), Protocol::Tcp).is_some());
+}
+
+#[test]
+fn cli_kill_keeps_json_on_stdout() {
+    let directory = tempfile::tempdir().expect("tempdir");
+    let (mut child, port) = spawn_python_listener(directory.path(), &[]);
+    wait_for(port, child.id(), Protocol::Tcp).expect("child listener not found");
+
+    let output = run_kill(port, &["--json", "--kill", "--force"], "");
+    assert!(output.status.success());
+    let json: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("valid JSON output");
+    assert_eq!(json["port"], port);
+    assert!(exited_within(&mut child, Duration::from_secs(5)));
+}
+
+#[test]
+fn cli_kill_exits_one_when_nothing_is_listening() {
+    let port = unused_port();
+    let output = run_kill(port, &["--kill", "--force"], "");
+    assert_eq!(output.status.code(), Some(1));
+}
