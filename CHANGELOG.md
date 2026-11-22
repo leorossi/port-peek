@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-22
+
 ### Added
 
 - Docker container metadata for forwarded ports. When the host listener is
@@ -50,5 +52,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   SHA-256 checksums.
 - Dual MIT/Apache-2.0 licensing.
 
-[Unreleased]: https://github.com/leorossi/port-peek/compare/v0.1.0...HEAD
+[0.2.0]: https://github.com/leorossi/port-peek/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/leorossi/port-peek/releases/tag/v0.1.0
